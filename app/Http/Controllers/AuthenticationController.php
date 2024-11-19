@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
+use Illuminate\Support\Facades\Log;
 
 class AuthenticationController extends Controller
 {
@@ -60,35 +61,106 @@ class AuthenticationController extends Controller
         $validated = $request->validate([
             'email' => 'required|string|email',
             'password' => 'required|string',
+        ], [
+            'email.required' => 'Email is required',
+            'email.email' => 'Please provide a valid email address',
+            'password.required' => 'Password is required',
         ]);
 
         $credentials = $validated;
 
-        if ($token = JWTAuth::attempt($credentials)) {
-            // return the role along with the token
-            $user = JWTAuth::user();
-            return response()->json([
-                'token' => $token,
-                'role' => $user->role,
-            ]);
-        }
+        try {
+            if ($token = JWTAuth::attempt($credentials)) {
+                $user = JWTAuth::user();
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Login successful',
+                    'data' => [
+                        'user' => [
+                            'id' => $user->id,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'role' => $user->role,
+                        ],
+                        'authorization' => [
+                            'token' => $token,
+                            'type' => 'bearer',
+                            'expires_in' => JWTAuth::factory()->getTTL() * 60
 
-        return response()->json(['error' => 'Unauthorized'], 401);
+                        ]
+                    ]
+                ], 200);
+            }
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid credentials',
+            ], 401);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'An error occurred during login',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
     }
 
-    // Get the currently authenticated user
+
     public function loginUser()
     {
-        $user = JWTAuth::user();
+        try {
+            Log::info('Token:', ['token' => JWTAuth::getToken()]);
 
-        return response()->json($user);
+            $user = JWTAuth::user();
+            Log::info('User lookup result:', ['user' => $user]);
+
+            if (!$user) {
+                Log::error('User not found for token');
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => $user->role,
+                    ]
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in loginUser:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error retrieving user information',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
     }
-
-    // Logout and invalidate token
     public function logout()
     {
-        JWTAuth::invalidate(JWTAuth::getToken());
+        try {
+            JWTAuth::invalidate(JWTAuth::getToken());
 
-        return response()->json(['message' => 'Successfully logged out']);
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Successfully logged out'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error during logout',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
+        }
     }
 }

@@ -11,5 +11,5 @@ use App\Http\Controllers\AuthenticationController;
 
 Route::post('register', [AuthenticationController::class, 'register']);
 Route::post('login', [AuthenticationController::class, 'login']);
-Route::middleware('auth:api')->get('user', [AuthenticationController::class, 'loginUser']);
-Route::middleware('auth:api')->post('logout', [AuthenticationController::class, 'logout']);
+Route::post('logout', [AuthenticationController::class, 'logout']);
+Route::get('user', [AuthenticationController::class, 'loginUser']);
