@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Hash;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthenticationController extends Controller
 {
@@ -104,6 +106,110 @@ class AuthenticationController extends Controller
             ], 500);
         }
     }
+
+
+    // public function redirectToGoogle()
+    // {
+    //     // Generate the Google authentication URL for the user to sign in
+    //     $googleUrl = Socialite::driver('google')->redirect()->getTargetUrl();
+
+    //     // Send the URL as a response (this will be redirected by the frontend)
+    //     return response()->json([
+    //         'status' => 'success',
+    //         'message' => 'Redirecting to Google',
+    //         'data' => [
+    //             'url' => $googleUrl,
+    //         ]
+    //     ]);
+    // }
+
+    public function redirectToGoogle()
+    {
+        Log::info('The redirectToGoogle method is called .....');
+
+        try {
+            // Generate the Google authentication URL for the user to sign in
+            $googleUrl = Socialite::driver('google')->redirect()->getTargetUrl();
+
+            Log::info('Connecting to Google URL: ' . $googleUrl);
+
+            // Redirect the user to the Google OAuth page
+            return redirect()->away($googleUrl);
+        } catch (\Exception $e) {
+            // Log any exceptions and handle the error
+            Log::error('Error redirecting to Google: ' . $e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'There was an issue with the Google login process.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle Google callback and authenticate user.
+     */
+    public function handleGoogleCallback(Request $request)
+    {
+        try {
+            // Retrieve the user from Google using Socialite
+            $googleUser = Socialite::driver('google')->user();
+
+            // Search for an existing user by Google ID
+            $user = User::where('google_id', $googleUser->getId())->first();
+
+            if ($user) {
+                // If the user exists, generate a JWT token
+                $token = JWTAuth::fromUser($user);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Login successful',
+                    'data' => [
+                        'user' => $user,
+                        'authorization' => [
+                            'token' => $token,
+                            'type' => 'bearer',
+                            'expires_in' => JWTAuth::factory()->getTTL() * 60,
+                        ],
+                    ],
+                ]);
+            } else {
+                // If the user does not exist, create a new one
+                $newUser = User::create([
+                    'name' => $googleUser->getName(),
+                    'email' => $googleUser->getEmail(),
+                    'google_id' => $googleUser->getId(),
+                    'password' => bcrypt(Str::random(16)), // Generate a random password
+                    'terms_accepted_at' => now(), // Automatically accept terms
+                ]);
+
+                // Generate a JWT token for the newly created user
+                $token = JWTAuth::fromUser($newUser);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Registration successful',
+                    'data' => [
+                        'user' => $newUser,
+                        'authorization' => [
+                            'token' => $token,
+                            'type' => 'bearer',
+                            'expires_in' => JWTAuth::factory()->getTTL() * 60,
+                        ],
+                    ],
+                ], 201);
+            }
+        } catch (\Exception $e) {
+            // Handle errors during login or user creation
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Unable to login using Google',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+            ], 500);
+        }
+    }
+
 
 
     public function loginUser()

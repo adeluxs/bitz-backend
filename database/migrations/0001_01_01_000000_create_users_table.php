@@ -18,6 +18,13 @@ return new class extends Migration
             $table->string('role')->default('user');
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+
+            $table->string('google_id')->nullable()->unique(); // Google ID
+            $table->string('provider')->nullable(); // Provider
+            $table->string('profile_picture')->nullable(); // Profile picture URL
+            $table->boolean('is_active')->default(true); // Active flag
+
+
             $table->rememberToken();
             $table->timestamps();
         });
